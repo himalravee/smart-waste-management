@@ -16,14 +16,14 @@ st.set_page_config(page_title="Waste Classifier", layout="wide")
 # Load model & classes
 # ----------------------
 @st.cache_resource
-def load_model(model_path="models/waste_mobilenetv2_final.h5"):
+def load_model(model_path="waste_mobilenetv2_final.h5"):
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found: {model_path}")
     model = tf.keras.models.load_model(model_path, compile=False)
     return model
 
 @st.cache_data
-def load_class_indices(json_path="models/class_indices.json"):
+def load_class_indices(json_path="class_indices.json"):
     if not os.path.exists(json_path):
         raise FileNotFoundError(f"class_indices.json not found: {json_path}")
     with open(json_path, "r", encoding="utf-8") as f:
