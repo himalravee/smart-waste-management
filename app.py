@@ -1,4 +1,4 @@
-# app.py
+# new_app.py
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -16,14 +16,14 @@ st.set_page_config(page_title="Waste Classifier", layout="wide")
 # Load model & classes
 # ----------------------
 @st.cache_resource
-def load_model(model_path="waste_mobilenetv2_final.h5"):
+def load_model(model_path="models/waste_mobilenetv2_final.h5"):
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found: {model_path}")
     model = tf.keras.models.load_model(model_path, compile=False)
     return model
 
 @st.cache_data
-def load_class_indices(json_path="class_indices.json"):
+def load_class_indices(json_path="models/class_indices.json"):
     if not os.path.exists(json_path):
         raise FileNotFoundError(f"class_indices.json not found: {json_path}")
     with open(json_path, "r", encoding="utf-8") as f:
@@ -45,15 +45,14 @@ except Exception as e:
     st.stop()
 
 # ----------------------
-# Preprocessing function (resize + padding)
+# Preprocessing function
 # ----------------------
 def preprocess_image_app(img: Image.Image, target_size=(224,224)):
     img = img.convert("RGB")
-    img = img.resize(target_size)  # simpler than thumbnail + padding
+    img = img.resize(target_size)
     arr = np.array(img).astype(np.float32)/255.0
     arr = np.expand_dims(arr, 0)
     return arr
-
 
 # ----------------------
 # Inference function
@@ -72,11 +71,10 @@ def infer(model, img_arr):
 # App UI
 # ----------------------
 st.title("Waste Classifier (MobileNetV2)")
-st.write("Upload an image; the model predicts the waste class and whether it's recyclable. Counts are kept per session.")
+st.write("Upload an image or use your camera; the model predicts the waste class and whether it's recyclable. Counts are kept per session.")
 
-# Sidebar for counts & recyclable settings
+# Sidebar: counts & recyclable settings
 st.sidebar.header("Session counts & settings")
-
 if "counts" not in st.session_state:
     st.session_state.counts = {name: 0 for name in class_names}
 if "total_recyclable" not in st.session_state:
@@ -117,15 +115,36 @@ if st.sidebar.button("Reset counts"):
     st.sidebar.success("Counts reset")
 
 # ----------------------
-# Main area: upload + predict
+# Main area: upload or camera
 # ----------------------
-uploaded = st.file_uploader("Upload an image (jpg/png)", type=["jpg","jpeg","png"])
+col_upload, col_camera = st.columns(2)
+
+# Upload image
+uploaded = col_upload.file_uploader("Upload an image (jpg/png)", type=["jpg","jpeg","png"])
+
+# Camera toggle button
+if "camera_open" not in st.session_state:
+    st.session_state.camera_open = False
+
+camera_button_label = "Close Camera" if st.session_state.camera_open else "Open Camera"
+if col_camera.button(camera_button_label):
+    st.session_state.camera_open = not st.session_state.camera_open
+
+camera_image = None
+if st.session_state.camera_open:
+    camera_image = col_camera.camera_input("Take a picture with your camera")
+
+# Decide which image to process
+image = None
 if uploaded is not None:
     image = Image.open(io.BytesIO(uploaded.read()))
+elif camera_image is not None:
+    image = Image.open(io.BytesIO(camera_image.read()))
 
+if image is not None:
     col1, col2 = st.columns([1,1])
     with col1:
-        st.image(image, caption="Uploaded image", use_container_width=True)
+        st.image(image, caption="Selected image", use_container_width=True)
 
     with st.spinner("Predicting..."):
         arr = preprocess_image_app(image)
@@ -139,7 +158,7 @@ if uploaded is not None:
         st.markdown(f"**Confidence:** {prob*100:.1f}%")
         st.markdown(f"**Recyclable:** {'Yes' if recyclable_flag else 'No'}")
 
-        # update counts
+        # Update counts
         st.session_state.counts[predicted_name] += 1
         if recyclable_flag:
             st.session_state.total_recyclable += 1
@@ -158,7 +177,6 @@ counts_df = pd.DataFrame.from_dict(
 counts_df.columns = ["Class", "Count"]
 counts_df["Recyclable"] = counts_df["Class"].apply(lambda x: "Yes" if x in st.session_state.recyclable_set else "No")
 
-# Add totals
 totals = pd.DataFrame({
     "Class": ["TOTAL Recyclable", "TOTAL Non-Recyclable"],
     "Count": [st.session_state.total_recyclable, st.session_state.total_non_recyclable],
@@ -166,11 +184,8 @@ totals = pd.DataFrame({
 })
 
 display_df = pd.concat([counts_df, totals], ignore_index=True)
-
-# Display table without icons
 st.dataframe(display_df.sort_values("Count", ascending=False), use_container_width=True)
 
-# CSV download
 csv = display_df.to_csv(index=False).encode("utf-8")
 st.download_button("Download CSV", data=csv, file_name="waste_counts.csv", mime="text/csv")
 
