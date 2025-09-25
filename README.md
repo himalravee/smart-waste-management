@@ -83,11 +83,6 @@ Model definition, training, and saving steps are in the notebook. Make sure to a
 
 * The notebook computes metrics and plots a confusion matrix and training history. Use these to analyze model performance and avoid overfitting.
 
-## Deployment
 
-* After converting to TFLite, the model can be deployed on edge devices like Raspberry Pi or ESP32 (with appropriate optimizations).
 
-## License
-
-This project is licensed under the MIT License. See `LICENSE` for details.
 
