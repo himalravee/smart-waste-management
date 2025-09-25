@@ -16,7 +16,7 @@ st.set_page_config(page_title="Waste Classifier", layout="wide")
 # Paths
 # ----------------------
 MODEL_PATH = "Updated_final_model.h5"
-CLASS_JSON_PATH = "updated_class_indices.json"
+CLASS_JSON_PATH = "class_indices.json"
 
 # ----------------------
 # Load model & classes
@@ -198,3 +198,4 @@ csv = display_df.to_csv(index=False).encode("utf-8")
 st.download_button("Download CSV", data=csv, file_name="waste_counts.csv", mime="text/csv")
 
 st.caption("Counts are session-only. For permanent storage, connect a database like SQLite.")
+
