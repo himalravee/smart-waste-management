@@ -20,7 +20,7 @@ st.set_page_config(page_title="Waste Classifier", layout="wide")
 # Paths
 # ----------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "updated_model_tf20.keras")
+MODEL_PATH = os.path.join(BASE_DIR, "updated_final_model.h5")
 CLASS_JSON_PATH = os.path.join(BASE_DIR, "class_indices.json")
 
 # ----------------------
@@ -214,4 +214,5 @@ csv = display_df.to_csv(index=False).encode("utf-8")
 st.download_button("Download CSV", data=csv, file_name="waste_counts.csv", mime="text/csv")
 
 st.caption("Counts are session-only. For permanent storage, connect a database like SQLite.")
+
 
