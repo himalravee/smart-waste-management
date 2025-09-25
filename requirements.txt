@@ -1,5 +1,7 @@
-streamlit==1.50.0
-tensorflow==2.20.0
-pillow
+streamlit
+tensorflow
+keras
 numpy
 pandas
+Pillow
+gdown
