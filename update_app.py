@@ -7,7 +7,6 @@ import pandas as pd
 from PIL import Image
 import streamlit as st
 from keras.models import load_model
-import gdown  # pip install gdown
 
 # ----------------------
 # Reduce TensorFlow logging and force CPU
@@ -23,15 +22,6 @@ st.set_page_config(page_title="Waste Classifier", layout="wide")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "updated_model_tf20.keras")
 CLASS_JSON_PATH = os.path.join(BASE_DIR, "class_indices.json")
-
-# ----------------------
-# Download model if missing (for Streamlit Cloud)
-# ----------------------
-if not os.path.exists(MODEL_PATH):
-    st.info("Downloading model...")
-    # Replace this ID with your Google Drive shareable file ID
-    file_id = "YOUR_GOOGLE_DRIVE_FILE_ID"
-    gdown.download(f"https://drive.google.com/uc?id={file_id}", MODEL_PATH, quiet=False)
 
 # ----------------------
 # Load model & classes
@@ -206,4 +196,3 @@ csv = display_df.to_csv(index=False).encode("utf-8")
 st.download_button("Download CSV", data=csv, file_name="waste_counts.csv", mime="text/csv")
 
 st.caption("Counts are session-only. For permanent storage, connect a database like SQLite.")
-
