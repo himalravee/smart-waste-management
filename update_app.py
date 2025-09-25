@@ -9,17 +9,19 @@ import streamlit as st
 from keras.models import load_model
 
 # ----------------------
-# Reduce TensorFlow logging
+# Reduce TensorFlow logging and force CPU
 # ----------------------
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # disable GPU warnings
 
 st.set_page_config(page_title="Waste Classifier", layout="wide")
 
 # ----------------------
 # Paths
 # ----------------------
-MODEL_PATH = "updated_model_tf20.keras"
-CLASS_JSON_PATH = "class_indices.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "updated_model_tf20.keras")
+CLASS_JSON_PATH = os.path.join(BASE_DIR, "class_indices.json")
 
 # ----------------------
 # Load model & classes
@@ -39,9 +41,6 @@ def load_class_names(path):
     idx_to_class = {v: k for k, v in class_indices.items()}
     return [idx_to_class[i] for i in range(len(idx_to_class))]
 
-# ----------------------
-# Load resources
-# ----------------------
 try:
     model = load_model_cached(MODEL_PATH)
     st.success("✅ Model loaded successfully")
@@ -51,7 +50,7 @@ except Exception as e:
 
 try:
     class_names = load_class_names(CLASS_JSON_PATH)
-    st.info(f"{len(class_names)} classes loaded from JSON")
+    st.info(f"{len(class_names)} classes loaded")
 except Exception as e:
     st.error(f"Unable to load class indices: {e}")
     st.stop()
