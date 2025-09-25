@@ -18,7 +18,9 @@ st.set_page_config(page_title="Waste Classifier", layout="wide")
 # ----------------------
 # Paths
 # ----------------------
-MODEL_PATH = "updated_model_tf20"
+from keras.models import load_model
+MODEL = load_model("updated_model_tf20.keras")
+
 CLASS_JSON_PATH = "class_indices.json"
 
 # ----------------------
@@ -195,4 +197,5 @@ csv = display_df.to_csv(index=False).encode("utf-8")
 st.download_button("Download CSV", data=csv, file_name="waste_counts.csv", mime="text/csv")
 
 st.caption("Counts are session-only. For permanent storage, connect a database like SQLite.")
+
 
