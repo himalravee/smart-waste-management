@@ -12,7 +12,7 @@ from keras.models import load_model
 # Reduce TensorFlow logging and force CPU
 # ----------------------
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # disable GPU warnings
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 st.set_page_config(page_title="Waste Classifier", layout="wide")
 
@@ -29,30 +29,48 @@ CLASS_JSON_PATH = os.path.join(BASE_DIR, "class_indices.json")
 @st.cache_resource
 def load_model_cached(path):
     if not os.path.exists(path):
-        raise FileNotFoundError(f"Model file not found: {path}")
+        return None
     return load_model(path)
 
 @st.cache_data
 def load_class_names(path):
     if not os.path.exists(path):
-        raise FileNotFoundError(f"Class JSON file not found: {path}")
+        return []
     with open(path, "r") as f:
         class_indices = json.load(f)
     idx_to_class = {v: k for k, v in class_indices.items()}
     return [idx_to_class[i] for i in range(len(idx_to_class))]
 
-try:
-    model = load_model_cached(MODEL_PATH)
+# ----------------------
+# Load resources
+# ----------------------
+model = load_model_cached(MODEL_PATH)
+if model is None:
+    st.warning("⚠️ Model file not found. Please upload a `.keras` model file.")
+    uploaded_model = st.file_uploader("Upload model", type=["keras"])
+    if uploaded_model is not None:
+        model_path_temp = os.path.join(BASE_DIR, "uploaded_model.keras")
+        with open(model_path_temp, "wb") as f:
+            f.write(uploaded_model.read())
+        model = load_model_cached(model_path_temp)
+        st.success("✅ Model loaded successfully")
+else:
     st.success("✅ Model loaded successfully")
-except Exception as e:
-    st.error(f"Unable to load model: {e}")
-    st.stop()
 
-try:
-    class_names = load_class_names(CLASS_JSON_PATH)
+class_names = load_class_names(CLASS_JSON_PATH)
+if not class_names:
+    st.warning("⚠️ Class JSON file not found. Please upload a `class_indices.json` file.")
+    uploaded_json = st.file_uploader("Upload class indices JSON", type=["json"])
+    if uploaded_json is not None:
+        json_path_temp = os.path.join(BASE_DIR, "uploaded_class_indices.json")
+        with open(json_path_temp, "wb") as f:
+            f.write(uploaded_json.read())
+        class_names = load_class_names(json_path_temp)
+        st.success(f"✅ Loaded {len(class_names)} classes")
+else:
     st.info(f"{len(class_names)} classes loaded")
-except Exception as e:
-    st.error(f"Unable to load class indices: {e}")
+
+if model is None or not class_names:
     st.stop()
 
 # ----------------------
@@ -196,3 +214,4 @@ csv = display_df.to_csv(index=False).encode("utf-8")
 st.download_button("Download CSV", data=csv, file_name="waste_counts.csv", mime="text/csv")
 
 st.caption("Counts are session-only. For permanent storage, connect a database like SQLite.")
+
