@@ -1,4 +1,4 @@
-# new_app.py
+# app.py
 import os
 import io
 import json
@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 import streamlit as st
-import tensorflow as tf
+from keras.models import load_model
 
 # ----------------------
 # Reduce TensorFlow logging
@@ -18,39 +18,39 @@ st.set_page_config(page_title="Waste Classifier", layout="wide")
 # ----------------------
 # Paths
 # ----------------------
-from keras.models import load_model
-
 MODEL_PATH = "updated_model_tf20.keras"
-model = load_model(MODEL_PATH)
 CLASS_JSON_PATH = "class_indices.json"
 
 # ----------------------
 # Load model & classes
 # ----------------------
 @st.cache_resource
-def load_model():
-    if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
-    return tf.keras.models.load_model(MODEL_PATH)
+def load_model_cached(path):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Model file not found: {path}")
+    return load_model(path)
 
 @st.cache_data
-def load_class_names():
-    if not os.path.exists(CLASS_JSON_PATH):
-        raise FileNotFoundError(f"Class JSON file not found: {CLASS_JSON_PATH}")
-    with open(CLASS_JSON_PATH, "r") as f:
+def load_class_names(path):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Class JSON file not found: {path}")
+    with open(path, "r") as f:
         class_indices = json.load(f)
     idx_to_class = {v: k for k, v in class_indices.items()}
     return [idx_to_class[i] for i in range(len(idx_to_class))]
 
+# ----------------------
+# Load resources
+# ----------------------
 try:
-    model = load_model()
+    model = load_model_cached(MODEL_PATH)
     st.success("✅ Model loaded successfully")
 except Exception as e:
     st.error(f"Unable to load model: {e}")
     st.stop()
 
 try:
-    class_names = load_class_names()
+    class_names = load_class_names(CLASS_JSON_PATH)
     st.info(f"{len(class_names)} classes loaded from JSON")
 except Exception as e:
     st.error(f"Unable to load class indices: {e}")
@@ -76,12 +76,6 @@ def infer(model, img_arr):
     return class_idx, prob
 
 # ----------------------
-# App UI
-# ----------------------
-st.title("Waste Classifier")
-st.write("Upload an image or use your camera; the model predicts the waste class and whether it's recyclable.")
-
-# ----------------------
 # Session counters
 # ----------------------
 if "counts" not in st.session_state:
@@ -90,6 +84,8 @@ if "total_recyclable" not in st.session_state:
     st.session_state.total_recyclable = 0
 if "total_non_recyclable" not in st.session_state:
     st.session_state.total_non_recyclable = 0
+if "camera_open" not in st.session_state:
+    st.session_state.camera_open = False
 
 # Default recyclable heuristics
 def default_recyclable(names):
@@ -98,6 +94,12 @@ def default_recyclable(names):
 
 if "recyclable_set" not in st.session_state:
     st.session_state.recyclable_set = default_recyclable(class_names)
+
+# ----------------------
+# App UI
+# ----------------------
+st.title("Waste Classifier")
+st.write("Upload an image or use your camera; the model predicts the waste class and whether it's recyclable.")
 
 # ----------------------
 # Sidebar controls
@@ -134,14 +136,11 @@ if st.sidebar.button("Reset Counts"):
 col_upload, col_camera = st.columns(2)
 uploaded = col_upload.file_uploader("Upload an image (jpg/png)", type=["jpg", "jpeg", "png"])
 
-if "camera_open" not in st.session_state:
-    st.session_state.camera_open = False
-
 camera_button_label = "Close Camera" if st.session_state.camera_open else "Open Camera"
 if col_camera.button(camera_button_label):
     st.session_state.camera_open = not st.session_state.camera_open
 
-camera_image = col_camera.camera_input("Take a picture with your camera") if st.session_state.camera_open else None
+camera_image = col_camera.camera_input("Take a picture") if st.session_state.camera_open else None
 
 # ----------------------
 # Prediction & display
@@ -198,6 +197,4 @@ csv = display_df.to_csv(index=False).encode("utf-8")
 st.download_button("Download CSV", data=csv, file_name="waste_counts.csv", mime="text/csv")
 
 st.caption("Counts are session-only. For permanent storage, connect a database like SQLite.")
-
-
 
