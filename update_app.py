@@ -1,82 +1,60 @@
-# app.py
+# new_app.py
 import os
-import io
-import json
-import numpy as np
-import pandas as pd
-from PIL import Image
-import streamlit as st
-from keras.models import load_model
-
-# ----------------------
-# Reduce TensorFlow logging and force CPU
-# ----------------------
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+import streamlit as st
+from PIL import Image
+import numpy as np
+import io
+import pandas as pd
+import tensorflow as tf
+import json
 
 st.set_page_config(page_title="Waste Classifier", layout="wide")
 
 # ----------------------
 # Paths
 # ----------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "updated_final_model.h5")
-CLASS_JSON_PATH = os.path.join(BASE_DIR, "class_indices.json")
+MODEL_PATH = "updated_model_tf20"
+CLASS_JSON_PATH = "class_indices.json"
 
 # ----------------------
 # Load model & classes
 # ----------------------
 @st.cache_resource
-def load_model_cached(path):
-    if not os.path.exists(path):
-        return None
-    return load_model(path)
+def load_model():
+    if not os.path.exists(MODEL_PATH):
+        raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
+    return tf.keras.models.load_model(MODEL_PATH)
 
 @st.cache_data
-def load_class_names(path):
-    if not os.path.exists(path):
-        return []
-    with open(path, "r") as f:
-        class_indices = json.load(f)
+def load_class_names():
+    if not os.path.exists(CLASS_JSON_PATH):
+        raise FileNotFoundError(f"class_indices.json not found: {CLASS_JSON_PATH}")
+    with open(CLASS_JSON_PATH, "r") as f:
+        class_indices = json.load(f)   # dict {class_name: index}
+    # reverse index to get class list in correct order
     idx_to_class = {v: k for k, v in class_indices.items()}
     return [idx_to_class[i] for i in range(len(idx_to_class))]
 
-# ----------------------
-# Load resources
-# ----------------------
-model = load_model_cached(MODEL_PATH)
-if model is None:
-    st.warning("⚠️ Model file not found. Please upload a `.keras` model file.")
-    uploaded_model = st.file_uploader("Upload model", type=["keras"])
-    if uploaded_model is not None:
-        model_path_temp = os.path.join(BASE_DIR, "uploaded_model.keras")
-        with open(model_path_temp, "wb") as f:
-            f.write(uploaded_model.read())
-        model = load_model_cached(model_path_temp)
-        st.success("✅ Model loaded successfully")
-else:
+try:
+    model = load_model()
     st.success("✅ Model loaded successfully")
+except Exception as e:
+    st.error(f"Unable to load model: {e}")
+    st.stop()
 
-class_names = load_class_names(CLASS_JSON_PATH)
-if not class_names:
-    st.warning("⚠️ Class JSON file not found. Please upload a `class_indices.json` file.")
-    uploaded_json = st.file_uploader("Upload class indices JSON", type=["json"])
-    if uploaded_json is not None:
-        json_path_temp = os.path.join(BASE_DIR, "uploaded_class_indices.json")
-        with open(json_path_temp, "wb") as f:
-            f.write(uploaded_json.read())
-        class_names = load_class_names(json_path_temp)
-        st.success(f"✅ Loaded {len(class_names)} classes")
-else:
-    st.info(f"{len(class_names)} classes loaded")
-
-if model is None or not class_names:
+try:
+    class_names = load_class_names()
+    st.info(f"{len(class_names)} classes loaded from JSON")
+except Exception as e:
+    st.error(f"Unable to load class indices: {e}")
     st.stop()
 
 # ----------------------
 # Preprocessing
 # ----------------------
-def preprocess_image(img: Image.Image, target_size=(224, 224)):
+def preprocess_image_app(img: Image.Image, target_size=(224, 224)):
     img = img.convert("RGB")
     img = img.resize(target_size)
     arr = np.array(img).astype(np.float32) / 255.0
@@ -93,18 +71,21 @@ def infer(model, img_arr):
     return class_idx, prob
 
 # ----------------------
-# Session counters
+# App UI
 # ----------------------
+st.title("Waste Classifier (Your Trained Model)")
+st.write("Upload an image or use your camera; the model predicts the waste class and whether it's recyclable. Counts are kept per session.")
+
+# Sidebar counters
+st.sidebar.header("Session counts & settings")
 if "counts" not in st.session_state:
     st.session_state.counts = {name: 0 for name in class_names}
 if "total_recyclable" not in st.session_state:
     st.session_state.total_recyclable = 0
 if "total_non_recyclable" not in st.session_state:
     st.session_state.total_non_recyclable = 0
-if "camera_open" not in st.session_state:
-    st.session_state.camera_open = False
 
-# Default recyclable heuristics
+# Default recyclable classes
 def default_recyclable(names):
     heuristics = ["plastic", "paper", "cardboard", "glass", "metal", "can", "aluminium", "tin"]
     return set([n for n in names if any(tok in n.lower() for tok in heuristics)])
@@ -112,18 +93,8 @@ def default_recyclable(names):
 if "recyclable_set" not in st.session_state:
     st.session_state.recyclable_set = default_recyclable(class_names)
 
-# ----------------------
-# App UI
-# ----------------------
-st.title("Waste Classifier")
-st.write("Upload an image or use your camera; the model predicts the waste class and whether it's recyclable.")
-
-# ----------------------
-# Sidebar controls
-# ----------------------
-st.sidebar.header("Session Counts & Settings")
-st.sidebar.subheader("Mark Recyclable Classes")
-with st.sidebar.expander("Edit Recyclable Classes"):
+st.sidebar.subheader("Mark recyclable classes")
+with st.sidebar.expander("Edit recyclable classes"):
     cols = st.columns(2)
     for i, name in enumerate(class_names):
         col = cols[i % 2]
@@ -135,32 +106,40 @@ with st.sidebar.expander("Edit Recyclable Classes"):
             st.session_state.recyclable_set.remove(name)
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("Current Session Counts")
-counts_df = pd.DataFrame.from_dict(st.session_state.counts, orient="index", columns=["Count"]).sort_values("Count", ascending=False)
-st.sidebar.write(counts_df)
+st.sidebar.subheader("Current session counts")
+st.sidebar.write(
+    pd.DataFrame.from_dict(st.session_state.counts, orient="index", columns=["count"])
+    .sort_values("count", ascending=False)
+)
 st.sidebar.write(f"Total recyclable: **{st.session_state.total_recyclable}**")
 st.sidebar.write(f"Total non-recyclable: **{st.session_state.total_non_recyclable}**")
 
-if st.sidebar.button("Reset Counts"):
+if st.sidebar.button("Reset counts"):
     st.session_state.counts = {name: 0 for name in class_names}
     st.session_state.total_recyclable = 0
     st.session_state.total_non_recyclable = 0
     st.sidebar.success("Counts reset")
 
 # ----------------------
-# Image input
+# Upload / Camera input
 # ----------------------
 col_upload, col_camera = st.columns(2)
+
 uploaded = col_upload.file_uploader("Upload an image (jpg/png)", type=["jpg", "jpeg", "png"])
+
+if "camera_open" not in st.session_state:
+    st.session_state.camera_open = False
 
 camera_button_label = "Close Camera" if st.session_state.camera_open else "Open Camera"
 if col_camera.button(camera_button_label):
     st.session_state.camera_open = not st.session_state.camera_open
 
-camera_image = col_camera.camera_input("Take a picture") if st.session_state.camera_open else None
+camera_image = None
+if st.session_state.camera_open:
+    camera_image = col_camera.camera_input("Take a picture with your camera")
 
 # ----------------------
-# Prediction & display
+# Prediction
 # ----------------------
 image = None
 if uploaded is not None:
@@ -168,24 +147,24 @@ if uploaded is not None:
 elif camera_image is not None:
     image = Image.open(io.BytesIO(camera_image.read()))
 
-if image:
+if image is not None:
     col1, col2 = st.columns([1, 1])
     with col1:
         st.image(image, caption="Selected image", use_container_width=True)
 
-    with col2:
-        with st.spinner("Predicting..."):
-            arr = preprocess_image(image)
-            class_idx, prob = infer(model, arr)
-            predicted_name = class_names[class_idx]
-            recyclable_flag = predicted_name in st.session_state.recyclable_set
+    with st.spinner("Predicting..."):
+        arr = preprocess_image_app(image)
+        class_idx, prob = infer(model, arr)
+        predicted_name = class_names[class_idx]
+        recyclable_flag = predicted_name in st.session_state.recyclable_set
 
+    with col2:
         st.subheader("Prediction")
         st.markdown(f"**Class:** `{predicted_name}`")
         st.markdown(f"**Confidence:** {prob*100:.1f}%")
         st.markdown(f"**Recyclable:** {'Yes' if recyclable_flag else 'No'}")
 
-        # Update session counters
+        # Update counters
         st.session_state.counts[predicted_name] += 1
         if recyclable_flag:
             st.session_state.total_recyclable += 1
@@ -193,13 +172,18 @@ if image:
             st.session_state.total_non_recyclable += 1
 
 # ----------------------
-# Session counts table & CSV
+# Session counts table
 # ----------------------
 st.write("---")
 st.markdown("## Session Counts")
-counts_df = pd.DataFrame.from_dict(st.session_state.counts, orient="index", columns=["Count"]).reset_index()
+
+counts_df = pd.DataFrame.from_dict(
+    st.session_state.counts, orient="index", columns=["Count"]
+).reset_index()
 counts_df.columns = ["Class", "Count"]
-counts_df["Recyclable"] = counts_df["Class"].apply(lambda x: "Yes" if x in st.session_state.recyclable_set else "No")
+counts_df["Recyclable"] = counts_df["Class"].apply(
+    lambda x: "Yes" if x in st.session_state.recyclable_set else "No"
+)
 
 totals = pd.DataFrame({
     "Class": ["TOTAL Recyclable", "TOTAL Non-Recyclable"],
@@ -214,5 +198,3 @@ csv = display_df.to_csv(index=False).encode("utf-8")
 st.download_button("Download CSV", data=csv, file_name="waste_counts.csv", mime="text/csv")
 
 st.caption("Counts are session-only. For permanent storage, connect a database like SQLite.")
-
-
